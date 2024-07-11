@@ -36,7 +36,7 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
     let headers = request_and_headers.split("\r\n").collect::<Vec<&str>>();
 
     let request = headers.first().unwrap();
-    let user_agent_line = headers.get(2).unwrap();
+    // let user_agent_line = headers.get(2).unwrap();
     let body = parts[1];
 
     let route = request.split(' ').nth(1).unwrap();
@@ -47,10 +47,10 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
             let response = "HTTP/1.1 200 OK\r\n\r\n";
             stream.write_all(response.as_bytes())?;
         }
-        "user-agent" => {
-            let user_agent = user_agent_line.split(": ").nth(1).unwrap();
-            send_text(&mut stream, user_agent)?;
-        }
+        // "user-agent" => {
+        //     let user_agent = user_agent_line.split(": ").nth(1).unwrap();
+        //     send_text(&mut stream, user_agent)?;
+        // }
         "echo" => {
             let message = route.split('/').nth(2).unwrap();
             send_text(&mut stream, message)?;
