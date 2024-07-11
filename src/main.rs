@@ -91,15 +91,7 @@ fn get_directory() -> Option<String> {
 }
 
 fn main() -> std::io::Result<()> {
-    let directory = match get_directory() {
-        Some(directory) => directory,
-        None => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "No directory specified",
-            ))
-        }
-    };
+    let directory = get_directory().unwrap_or("files".into());
 
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
