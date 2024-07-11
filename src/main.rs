@@ -10,10 +10,19 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     println!("{}", request_line);
 
     let route = request_line.split(' ').nth(1).unwrap();
+    let base_route = route.split('/').nth(1).unwrap();
 
-    match route {
-        "/" => {
+    println!("base_route: {}", base_route);
+
+    match base_route {
+        "" => {
             let response = "HTTP/1.1 200 OK\r\n\r\n";
+            stream.write_all(response.as_bytes())?;
+        }
+        "echo" => {
+            let message = route.split('/').nth(2).unwrap();
+            let length = message.len();
+            let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {length}\r\n\r\n{message}");
             stream.write_all(response.as_bytes())?;
         }
         _ => {
@@ -32,7 +41,12 @@ fn main() -> std::io::Result<()> {
         match stream {
             Ok(_stream) => {
                 println!("accepted new connection");
-                handle_connection(_stream)?;
+                match handle_connection(_stream) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("error: {}", e);
+                    }
+                };
             }
             Err(e) => {
                 println!("error: {}", e);
