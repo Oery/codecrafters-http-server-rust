@@ -24,21 +24,22 @@ fn send_octet_stream(stream: &mut TcpStream, contents: &[u8]) -> std::io::Result
 }
 
 fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<()> {
-    let buf_reader = BufReader::new(&mut stream);
+    let mut request = [0_u8; 1024];
+    let bytes = stream.read(&mut request)?;
+    let request_string = String::from_utf8_lossy(&request[..bytes]).into_owned();
 
-    let mut lines = buf_reader.lines();
-    let request_line = lines.next().unwrap().unwrap();
-
-    let _host_line = lines.next().unwrap().unwrap();
-    let user_agent_line = lines.next().unwrap().unwrap();
-    let _accept_line = lines.next().unwrap().unwrap();
-    let _content_length_line = lines.next().unwrap().unwrap();
-
-    println!("{}", request_line);
-    println!("{}", user_agent_line);
     println!("Serving files from directory: {}", directory);
 
-    let route = request_line.split(' ').nth(1).unwrap();
+    let parts = request_string.split("\r\n\r\n").collect::<Vec<&str>>();
+    println!("{:?}", parts);
+    let request_and_headers = parts[0];
+    let headers = request_and_headers.split("\r\n").collect::<Vec<&str>>();
+
+    let request = headers.first().unwrap();
+    let user_agent_line = headers.get(2).unwrap();
+    let body = parts[1];
+
+    let route = request.split(' ').nth(1).unwrap();
     let base_route = route.split('/').nth(1).unwrap();
 
     match base_route {
@@ -55,7 +56,7 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
             send_text(&mut stream, message)?;
         }
         "files" => {
-            let method = request_line.split(' ').next().unwrap();
+            let method = request.split(' ').next().unwrap();
             println!("{}", method);
             match method {
                 "GET" => {
@@ -76,13 +77,10 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
                     let file = route.split('/').nth(2).unwrap();
                     let path = format!("{}/{}", directory, file);
 
-                    let _content_type_line = lines.next().unwrap().unwrap();
-                    let _content_length_line = lines.next().unwrap().unwrap();
-                    let content_line = lines.next().unwrap().unwrap();
-
-                    println!("Received : {:?}", content_line);
+                    let content = body.split('\r').next().unwrap();
 
                     println!("Saving file to {}", path);
+
                     let mut file = match std::fs::File::create(path) {
                         Ok(file) => file,
                         Err(_) => {
@@ -91,7 +89,7 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
                             return Ok(());
                         }
                     };
-                    file.write_all(content_line.as_bytes())?;
+                    file.write_all(content.as_bytes())?;
                     let response = "HTTP/1.1 201 Created\r\n\r\n";
                     stream.write_all(response.as_bytes())?;
                     return Ok(());
