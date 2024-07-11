@@ -80,9 +80,6 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
                     let _content_length_line = lines.next().unwrap().unwrap();
                     let content_line = lines.next().unwrap().unwrap();
 
-                    let mut contents = Vec::new();
-                    stream.read_to_end(&mut contents)?;
-
                     println!("Received : {:?}", content_line);
 
                     println!("Saving file to {}", path);
@@ -94,7 +91,7 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
                             return Ok(());
                         }
                     };
-                    file.write_all(&contents)?;
+                    file.write_all(content_line.as_bytes())?;
                     let response = "HTTP/1.1 201 Created\r\n\r\n";
                     stream.write_all(response.as_bytes())?;
                     return Ok(());
