@@ -31,6 +31,8 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
 
     let _host_line = lines.next().unwrap().unwrap();
     let user_agent_line = lines.next().unwrap().unwrap();
+    let _accept_line = lines.next().unwrap().unwrap();
+    let _content_length_line = lines.next().unwrap().unwrap();
 
     println!("{}", request_line);
     println!("{}", user_agent_line);
@@ -53,18 +55,56 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
             send_text(&mut stream, message)?;
         }
         "files" => {
-            let file = route.split('/').nth(2).unwrap();
-            let path = format!("{}/{}", directory, file);
+            let method = request_line.split(' ').next().unwrap();
+            println!("{}", method);
+            match method {
+                "GET" => {
+                    let file = route.split('/').nth(2).unwrap();
+                    let path = format!("{}/{}", directory, file);
 
-            let contents = match std::fs::read(path) {
-                Ok(contents) => contents,
-                Err(_) => {
-                    let response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                    let contents = match std::fs::read(path) {
+                        Ok(contents) => contents,
+                        Err(_) => {
+                            let response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                            stream.write_all(response.as_bytes())?;
+                            return Ok(());
+                        }
+                    };
+                    send_octet_stream(&mut stream, &contents)?;
+                }
+                "POST" => {
+                    let file = route.split('/').nth(2).unwrap();
+                    let path = format!("{}/{}", directory, file);
+
+                    let _content_type_line = lines.next().unwrap().unwrap();
+                    let _content_length_line = lines.next().unwrap().unwrap();
+                    let content_line = lines.next().unwrap().unwrap();
+
+                    let mut contents = Vec::new();
+                    stream.read_to_end(&mut contents)?;
+
+                    println!("Received : {:?}", content_line);
+
+                    println!("Saving file to {}", path);
+                    let mut file = match std::fs::File::create(path) {
+                        Ok(file) => file,
+                        Err(_) => {
+                            let response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                            stream.write_all(response.as_bytes())?;
+                            return Ok(());
+                        }
+                    };
+                    file.write_all(&contents)?;
+                    let response = "HTTP/1.1 201 Created\r\n\r\n";
                     stream.write_all(response.as_bytes())?;
                     return Ok(());
                 }
-            };
-            send_octet_stream(&mut stream, &contents)?;
+                _ => {
+                    let response = "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
+                    stream.write_all(response.as_bytes())?;
+                    return Ok(());
+                }
+            }
         }
         _ => {
             let response = "HTTP/1.1 404 Not Found\r\n\r\n";
