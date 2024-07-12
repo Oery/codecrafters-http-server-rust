@@ -96,9 +96,9 @@ async fn send_text_with_encoding(
     encoding: &str,
 ) -> std::io::Result<()> {
     let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nContent-Encoding: {}\r\n\r\n{}",
-        text.len(),
+        "HTTP/1.1 200 OK\r\nContent-Encoding: {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
         encoding,
+        text.len(),
         text
     );
     stream.write_all(response.as_bytes()).await
@@ -150,7 +150,7 @@ async fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::R
         },
         "echo" => match request.path.split('/').nth(2) {
             Some(message) => {
-                if let Some(encoding) = request.content_encoding {
+                if let Some(encoding) = request.accept_encoding {
                     send_text_with_encoding(&mut stream, message, &encoding).await?;
                     return Ok(());
                 }
