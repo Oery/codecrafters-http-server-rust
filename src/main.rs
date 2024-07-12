@@ -97,6 +97,8 @@ async fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::R
     let bytes = stream.read(&mut request).await?;
     let request_string = String::from_utf8_lossy(&request[..bytes]).into_owned();
 
+    println!("request: {}", request_string);
+
     let request = match Request::parse(&request_string) {
         Ok(request) => request,
         Err(e) => {
@@ -201,9 +203,17 @@ async fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4221").await?;
 
     loop {
-        let (stream, _) = listener.accept().await?;
-        if let Err(e) = handle_connection(stream, &directory).await {
-            eprintln!("error handling connection: {}", e);
-        }
+        let directory = directory.clone();
+        let (stream, _) = match listener.accept().await {
+            Ok(stream) => stream,
+            Err(e) => {
+                eprintln!("error accepting connection: {}", e);
+                continue;
+            }
+        };
+        tokio::spawn(async move { handle_connection(stream, &directory).await });
+        // if let Err(e) = handle_connection(stream, &directory).await {
+        //     eprintln!("error handling connection: {}", e);
+        // }
     }
 }
