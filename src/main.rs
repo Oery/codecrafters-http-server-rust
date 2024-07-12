@@ -1,3 +1,5 @@
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use std::{env, io::Write};
 use tokio::io::AsyncReadExt;
 
@@ -88,18 +90,26 @@ async fn send_text(stream: &mut TcpStream, text: &str) -> std::io::Result<()> {
     stream.write_all(response.as_bytes()).await
 }
 
-async fn send_text_with_encoding(
+async fn send_gzipped_text(
     stream: &mut TcpStream,
     text: &str,
     encoding: &str,
 ) -> std::io::Result<()> {
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Encoding: {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+    let text = text.as_bytes();
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(text)?;
+    let compressed = encoder.finish()?;
+
+    let mut response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Encoding: {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n",
         encoding,
-        text.len(),
-        text
-    );
-    stream.write_all(response.as_bytes()).await
+        compressed.len(),
+    ).into_bytes();
+
+    response.extend_from_slice(&compressed);
+
+    stream.write_all(&response).await?;
+    Ok(())
 }
 
 async fn send_octet_stream(stream: &mut TcpStream, contents: &[u8]) -> std::io::Result<()> {
@@ -150,7 +160,7 @@ async fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::R
             Some(message) => {
                 if let Some(encoding) = request.accept_encoding {
                     if encoding.contains(&"gzip".to_string()) {
-                        send_text_with_encoding(&mut stream, message, "gzip").await?;
+                        send_gzipped_text(&mut stream, message, "gzip").await?;
                         return Ok(());
                     }
                 }
