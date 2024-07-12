@@ -1,6 +1,8 @@
-use std::{
-    env,
-    io::{prelude::*, Write},
+use std::{env, io::Write};
+use tokio::io::AsyncReadExt;
+
+use tokio::{
+    io::AsyncWriteExt,
     net::{TcpListener, TcpStream},
 };
 
@@ -69,28 +71,28 @@ impl Request {
     }
 }
 
-fn send_text(stream: &mut TcpStream, text: &str) -> std::io::Result<()> {
+async fn send_text(stream: &mut TcpStream, text: &str) -> std::io::Result<()> {
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
         text.len(),
         text
     );
-    stream.write_all(response.as_bytes())
+    stream.write_all(response.as_bytes()).await
 }
 
-fn send_octet_stream(stream: &mut TcpStream, contents: &[u8]) -> std::io::Result<()> {
+async fn send_octet_stream(stream: &mut TcpStream, contents: &[u8]) -> std::io::Result<()> {
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
         contents.len(),
     );
-    stream.write_all(response.as_bytes())?;
-    stream.write_all(contents)?;
+    stream.write_all(response.as_bytes()).await?;
+    stream.write_all(contents).await?;
     Ok(())
 }
 
-fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<()> {
+async fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<()> {
     let mut request = [0_u8; 1024];
-    let bytes = stream.read(&mut request)?;
+    let bytes = stream.read(&mut request).await?;
     let request_string = String::from_utf8_lossy(&request[..bytes]).into_owned();
 
     let request = Request::parse(&request_string)?;
@@ -101,15 +103,15 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
     match base_route {
         "" => {
             let response = "HTTP/1.1 200 OK\r\n\r\n";
-            stream.write_all(response.as_bytes())?;
+            stream.write_all(response.as_bytes()).await?;
         }
         "user-agent" => {
             let user_agent = request.user_agent.unwrap();
-            send_text(&mut stream, &user_agent)?;
+            send_text(&mut stream, &user_agent).await?;
         }
         "echo" => {
             let message = request.path.split('/').nth(2).unwrap();
-            send_text(&mut stream, message)?;
+            send_text(&mut stream, message).await?;
         }
         "files" => match request.method {
             Method::Get => {
@@ -120,11 +122,11 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
                     Ok(contents) => contents,
                     Err(_) => {
                         let response = "HTTP/1.1 404 Not Found\r\n\r\n";
-                        stream.write_all(response.as_bytes())?;
+                        stream.write_all(response.as_bytes()).await?;
                         return Ok(());
                     }
                 };
-                send_octet_stream(&mut stream, &contents)?;
+                send_octet_stream(&mut stream, &contents).await?;
             }
             Method::Post => {
                 let file = request.path.split('/').nth(2).unwrap();
@@ -139,19 +141,19 @@ fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::Result<
                     Ok(file) => file,
                     Err(_) => {
                         let response = "HTTP/1.1 404 Not Found\r\n\r\n";
-                        stream.write_all(response.as_bytes())?;
+                        stream.write_all(response.as_bytes()).await?;
                         return Ok(());
                     }
                 };
                 file.write_all(content.as_bytes())?;
                 let response = "HTTP/1.1 201 Created\r\n\r\n";
-                stream.write_all(response.as_bytes())?;
+                stream.write_all(response.as_bytes()).await?;
                 return Ok(());
             }
         },
         _ => {
             let response = "HTTP/1.1 404 Not Found\r\n\r\n";
-            stream.write_all(response.as_bytes())?;
+            stream.write_all(response.as_bytes()).await?;
         }
     }
 
@@ -173,25 +175,15 @@ fn get_directory() -> Option<String> {
     None
 }
 
-fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     let directory = get_directory().unwrap_or("files".into());
 
-    let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:4221").await?;
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(_stream) => {
-                println!("accepted new connection");
-
-                if let Err(e) = handle_connection(_stream, &directory) {
-                    println!("error: {}", e);
-                }
-            }
-            Err(e) => {
-                println!("error: {}", e);
-            }
-        }
+    loop {
+        let (stream, _) = listener.accept().await?;
+        println!("accepted new connection");
+        handle_connection(stream, &directory).await?;
     }
-
-    Ok(())
 }
