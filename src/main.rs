@@ -151,8 +151,10 @@ async fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::R
         "echo" => match request.path.split('/').nth(2) {
             Some(message) => {
                 if let Some(encoding) = request.accept_encoding {
-                    send_text_with_encoding(&mut stream, message, &encoding).await?;
-                    return Ok(());
+                    if encoding != "invalid-encoding" {
+                        send_text_with_encoding(&mut stream, message, &encoding).await?;
+                        return Ok(());
+                    }
                 }
 
                 send_text(&mut stream, message).await?;
