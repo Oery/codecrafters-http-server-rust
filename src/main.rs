@@ -18,8 +18,7 @@ struct Request {
     method: Method,
     path: String,
     user_agent: Option<String>,
-    accept_encoding: Option<String>,
-    content_encoding: Option<String>,
+    accept_encoding: Option<Vec<String>>,
     content_type: Option<String>,
     content_length: Option<usize>,
     body: Option<String>,
@@ -38,7 +37,6 @@ impl Request {
 
         let mut user_agent = None;
         let mut accept_encoding = None;
-        let mut content_encoding = None;
         let mut content_type = None;
         let mut content_length = None;
 
@@ -50,8 +48,9 @@ impl Request {
                 println!("key: {}, value: {}", key, value);
                 match key.to_lowercase().as_str() {
                     "user-agent" => user_agent = Some(value.to_string()),
-                    "accept-encoding" => accept_encoding = Some(value.to_string()),
-                    "content-encoding" => content_encoding = Some(value.to_string()),
+                    "accept-encoding" => {
+                        accept_encoding = Some(value.split(", ").map(|s| s.to_string()).collect())
+                    }
                     "content-type" => content_type = Some(value.to_string()),
                     "content-length" => content_length = Some(value.parse::<usize>().unwrap()),
                     _ => {}
@@ -73,7 +72,6 @@ impl Request {
             path: path.to_string(),
             user_agent,
             accept_encoding,
-            content_encoding,
             content_type,
             content_length,
             body,
@@ -151,8 +149,8 @@ async fn handle_connection(mut stream: TcpStream, directory: &str) -> std::io::R
         "echo" => match request.path.split('/').nth(2) {
             Some(message) => {
                 if let Some(encoding) = request.accept_encoding {
-                    if encoding != "invalid-encoding" {
-                        send_text_with_encoding(&mut stream, message, &encoding).await?;
+                    if encoding.contains(&"gzip".to_string()) {
+                        send_text_with_encoding(&mut stream, message, "gzip").await?;
                         return Ok(());
                     }
                 }
